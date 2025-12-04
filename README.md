@@ -1,0 +1,1 @@
+# Extracted from https://alex-damian.github.io/adam/
