@@ -3,6 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GUI } from 'lil-gui';
 import { shaders } from './shaders.js';
 import { Arrow } from './arrow.js';
+import {_plasma_data, _viridis_data} from "./color_map.js"
 
 let controlCanvas, controlCtx;
 const cameraCenter = new THREE.Vector3(0, 0, 0.25);
@@ -39,6 +40,13 @@ let params = {
     point_size: 2,
     alpha: 1,
     n_arrows: 12,
+    palette: "plasma"
+};
+
+let colorCache = {
+  steps: null,
+  palette: null,
+  array: null  // Float32Array length = steps * 3
 };
 
 const presets = {
@@ -99,6 +107,9 @@ function setupGUI() {
     ctrls.add(params, 'point_size').name('Point Size').min(0).onChange(() => { material.uniforms.size.value = params.point_size; }).listen();
     ctrls.add(params, 'alpha', 0, 1).name('Alpha').onChange(() => { material.uniforms.alpha.value = params.alpha; }).listen();
     ctrls.add(params, 'n_arrows').name('Number of Arrows').min(0).step(1).onChange(updateArrows).listen();
+
+    ctrls.add(params, 'palette').name('Palette').options(["plasma", "viridis", "white"]).onChange(() => { ensureColorCache(params.steps, params.palette); applyColorsToGeometry(); }).listen();
+
     Object.keys(presets).forEach(k => ctrls.add(presets, k).name(k));
 
     const style = document.createElement('style');
@@ -113,10 +124,76 @@ function setupGUI() {
     gui.domElement.style.left = '10px';
 }
 
+
+function applyColorsToGeometry() {
+  if (!geometry) return;
+  const steps = (geometry.attributes.position.array.length / 3) | 0;
+  const colors = ensureColorCache(steps, params.palette);
+
+  if (!geometry.getAttribute("aColor") || geometry.getAttribute("aColor").array.length !== colors.length) {
+    // create new attribute
+    geometry.setAttribute("aColor", new THREE.BufferAttribute(new Float32Array(colors), 3));
+  } else {
+    // update in-place
+    const colArr = geometry.getAttribute("aColor").array;
+    colArr.set(colors);
+    geometry.getAttribute("aColor").needsUpdate = true;
+  }
+}
+
+
+function ensureColorCache(steps, palette = 'plasma') {
+  if (colorCache.steps === steps && colorCache.palette === palette && colorCache.array) {
+    return colorCache.array;
+  }
+
+  const arr = new Float32Array(steps * 3);
+
+
+  if(palette == "white"){
+    arr.fill(1.0);
+    return arr;
+  }
+
+  // sampled stops for viridis and plasma (8 stops each) - linear interpolation between stops
+  // (values taken from common matplotlib samples; we use a small set and linearly interpolate)
+  const palettes = {
+    viridis: _viridis_data,
+    plasma: _plasma_data
+  };
+
+  const stops = palettes[palette] || palettes.plasma;
+  const nStops = stops.length;
+
+  for (let i = 0; i < steps; i++) {
+    const t = steps === 1 ? 0.0 : i / (steps - 1); // normalized 0..1
+    // map t into stops
+    const scaled = t * (nStops - 1);
+    const idx = Math.floor(scaled);
+    const frac = Math.min(Math.max(scaled - idx, 0), 1);
+    const c0 = stops[idx];
+    const c1 = stops[Math.min(idx + 1, nStops - 1)];
+    const r = c0[0] * (1 - frac) + c1[0] * frac;
+    const g = c0[1] * (1 - frac) + c1[1] * frac;
+    const b = c0[2] * (1 - frac) + c1[2] * frac;
+    arr[i * 3] = r;
+    arr[i * 3 + 1] = g;
+    arr[i * 3 + 2] = b;
+  }
+
+  colorCache.steps = steps;
+  colorCache.palette = palette;
+  colorCache.array = arr;
+  return arr;
+}
+
+
 let workerRunning = false, pendingUpdate = null, adamWorker = null;
 function updateVisualization() {
     material.uniforms.size.value = params.point_size;
     material.uniforms.alpha.value = params.alpha;
+
+    ensureColorCache(params.steps, params.palette);
     pendingUpdate = { params, steps: params.steps, warmup: params.warmup };
     if (!workerRunning) processNextUpdate();
 }
@@ -132,10 +209,18 @@ function processNextUpdate() {
             geometry.dispose();
             geometry = new THREE.BufferGeometry();
             geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
+
+            const steps = vertices.length / 3;
+            const colors = ensureColorCache(steps, params.palette);
+            geometry.setAttribute("aColor", new THREE.BufferAttribute(new Float32Array(colors), 3));
+
+
             mesh.geometry = geometry;
         } else {
             arr.set(vertices);
             geometry.attributes.position.needsUpdate = true;
+
+            applyColorsToGeometry();
         }
         workerRunning = false;
         processNextUpdate();
@@ -150,12 +235,17 @@ function processNextUpdate() {
 
 let geometry = new THREE.BufferGeometry();
 geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(params.steps * 3), 3));
+
+const initialColors = ensureColorCache(params.steps, params.palette);
+geometry.setAttribute("aColor", new THREE.BufferAttribute(new Float32Array(initialColors), 3));
+
 const material = new THREE.ShaderMaterial({
     uniforms: { color: { value: new THREE.Color(1, 1, 1) }, size: { value: params.point_size }, alpha: { value: params.alpha } },
     vertexShader: shaders.vertex,
     fragmentShader: shaders.fragment,
     transparent: true,
     depthWrite: false,
+    vertexColors: true
 });
 updateVisualization();
 const mesh = new THREE.Points(geometry, material);

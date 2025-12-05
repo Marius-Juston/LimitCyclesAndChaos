@@ -1,8 +1,12 @@
 // Create a file called 'shaders.js'
 export const shaders = {
+
   vertex: `
+      attribute vec3 aColor;
+      varying vec3 vColor;
       uniform float size;
       void main() {
+        vColor = aColor;
         vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
         gl_PointSize = size;
         gl_Position = projectionMatrix * mvPosition;
@@ -10,7 +14,7 @@ export const shaders = {
     `,
 
   fragment: `
-      uniform vec3 pointColor;
+      varying vec3 vColor;
       uniform float alpha;
       void main() {
         vec2 p = gl_PointCoord - vec2(0.5);
@@ -18,7 +22,7 @@ export const shaders = {
         float pixelSize = fwidth(dist);
         float edge = 0.475;
         float multiplier = smoothstep(edge + pixelSize, edge - pixelSize, dist);
-        gl_FragColor = vec4(1.0, 1.0, 1.0, alpha * multiplier);
+        gl_FragColor = vec4(vColor, alpha * multiplier);
       }
     `
 };
