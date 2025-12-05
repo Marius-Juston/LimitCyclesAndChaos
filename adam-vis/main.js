@@ -37,10 +37,16 @@ let params = {
     b2: 0.44,
     weight_decay: 0.01,
     epsilon: 0,
+
+    
+};
+
+let vizParams =  {
+    palette: "plasma",
+    animationSpeed : 1.0,
     point_size: 2,
     alpha: 1,
     n_arrows: 12,
-    palette: "plasma"
 };
 
 let colorCache = {
@@ -50,10 +56,10 @@ let colorCache = {
 };
 
 const presets = {
-    "Preset 1": () => { Object.assign(params, { warmup: 10000, steps: 100000, lr: 1.0, b1: 0.92, b2: 0.44, weight_decay: 0.01, epsilon: 0, point_size: 2, alpha: 1, n_arrows: 12 }); updateVisualization(); updateBox(); },
-    "Preset 2": () => { Object.assign(params, { warmup: 10000, steps: 1000000, lr: 1.0, b1: 0.51, b2: 0.55, weight_decay: 0.01, epsilon: 0, point_size: 2, alpha: 0.1, n_arrows: 0 }); updateVisualization(); updateBox(); },
-    "Preset 3": () => { Object.assign(params, { warmup: 10000, steps: 1000000, lr: 1.0, b1: 0.9, b2: 0.14, weight_decay: 0.01, epsilon: 0, point_size: 2, alpha: 0.1, n_arrows: 16 }); updateVisualization(); updateBox(); },
-    "Preset 4": () => { Object.assign(params, { warmup: 10000, steps: 1000000, lr: 1.0, b1: 0.22, b2: 0.55, weight_decay: 0.01, epsilon: 0, point_size: 2, alpha: 0.05, n_arrows: 0 }); updateVisualization(); updateBox(); },
+    "Preset 1": () => { Object.assign(params, { warmup: 10000, steps: 100000, lr: 1.0, b1: 0.92, b2: 0.44, weight_decay: 0.01, epsilon: 0}); Object.assign(vizParams, {point_size: 2, alpha: 1, n_arrows: 12}); updateVisualization(); updateBox(); },
+    "Preset 2": () => { Object.assign(params, { warmup: 10000, steps: 1000000, lr: 1.0, b1: 0.51, b2: 0.55, weight_decay: 0.01, epsilon: 0}); Object.assign(vizParams, {point_size: 2, alpha: 0.1, n_arrows: 0}); updateVisualization(); updateBox(); },
+    "Preset 3": () => { Object.assign(params, { warmup: 10000, steps: 1000000, lr: 1.0, b1: 0.9, b2: 0.14, weight_decay: 0.01, epsilon: 0}); Object.assign(vizParams, {point_size: 2, alpha: 0.1, n_arrows: 16}); updateVisualization(); updateBox(); },
+    "Preset 4": () => { Object.assign(params, { warmup: 10000, steps: 1000000, lr: 1.0, b1: 0.22, b2: 0.55, weight_decay: 0.01, epsilon: 0}); Object.assign(vizParams, {point_size: 2, alpha: 0.05, n_arrows: 0}); updateVisualization(); updateBox(); },
 };
 
 const rs = { s: 1, box: 300, guiW: 320, guiFS: 13, titleFS: 18, labelFS: 36, spriteFS: 32 };
@@ -104,11 +110,15 @@ function setupGUI() {
     ctrls.add(params, 'lr').name('Learning Rate').min(0).onChange(updateVisualization).listen();
     ctrls.add(params, 'epsilon').name('epsilon').min(0).onChange(updateVisualization).listen();
     ctrls.add(params, 'weight_decay', 0, 1).name('weight_decay').onChange(updateVisualization).listen();
-    ctrls.add(params, 'point_size').name('Point Size').min(0).onChange(() => { material.uniforms.size.value = params.point_size; }).listen();
-    ctrls.add(params, 'alpha', 0, 1).name('Alpha').onChange(() => { material.uniforms.alpha.value = params.alpha; }).listen();
-    ctrls.add(params, 'n_arrows').name('Number of Arrows').min(0).step(1).onChange(updateArrows).listen();
 
-    ctrls.add(params, 'palette').name('Palette').options(["plasma", "viridis", "white"]).onChange(() => { ensureColorCache(params.steps, params.palette); applyColorsToGeometry(); }).listen();
+    const viewCtrls = gui.addFolder('🎛️ Vizualization');
+
+    viewCtrls.add(vizParams, 'palette').name('Palette').options(["plasma", "viridis", "white"]).onChange(() => { ensureColorCache(params.steps, vizParams.palette); applyColorsToGeometry(); }).listen();
+    viewCtrls.add(vizParams, 'animationSpeed', 0.0, 2.0).name('Animation Speed').listen();
+
+    viewCtrls.add(vizParams, 'point_size').name('Point Size').min(0).onChange(() => { material.uniforms.size.value = vizParams.point_size; }).listen();
+    viewCtrls.add(vizParams, 'alpha', 0, 1).name('Alpha').onChange(() => { material.uniforms.alpha.value = vizParams.alpha; }).listen();
+    viewCtrls.add(vizParams, 'n_arrows').name('Number of Arrows').min(0).step(1).onChange(updateArrows).listen();
 
     Object.keys(presets).forEach(k => ctrls.add(presets, k).name(k));
 
@@ -128,7 +138,7 @@ function setupGUI() {
 function applyColorsToGeometry() {
   if (!geometry) return;
   const steps = (geometry.attributes.position.array.length / 3) | 0;
-  const colors = ensureColorCache(steps, params.palette);
+  const colors = ensureColorCache(steps, vizParams.palette);
 
   if (!geometry.getAttribute("aColor") || geometry.getAttribute("aColor").array.length !== colors.length) {
     // create new attribute
@@ -190,10 +200,10 @@ function ensureColorCache(steps, palette = 'plasma') {
 
 let workerRunning = false, pendingUpdate = null, adamWorker = null;
 function updateVisualization() {
-    material.uniforms.size.value = params.point_size;
-    material.uniforms.alpha.value = params.alpha;
+    material.uniforms.size.value = vizParams.point_size;
+    material.uniforms.alpha.value = vizParams.alpha;
 
-    ensureColorCache(params.steps, params.palette);
+    ensureColorCache(params.steps, vizParams.palette);
     pendingUpdate = { params, steps: params.steps, warmup: params.warmup };
     if (!workerRunning) processNextUpdate();
 }
@@ -211,7 +221,7 @@ function processNextUpdate() {
             geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(vertices), 3));
 
             const steps = vertices.length / 3;
-            const colors = ensureColorCache(steps, params.palette);
+            const colors = ensureColorCache(steps, vizParams.palette);
             geometry.setAttribute("aColor", new THREE.BufferAttribute(new Float32Array(colors), 3));
 
 
@@ -236,11 +246,11 @@ function processNextUpdate() {
 let geometry = new THREE.BufferGeometry();
 geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(params.steps * 3), 3));
 
-const initialColors = ensureColorCache(params.steps, params.palette);
+const initialColors = ensureColorCache(params.steps, vizParams.palette);
 geometry.setAttribute("aColor", new THREE.BufferAttribute(new Float32Array(initialColors), 3));
 
 const material = new THREE.ShaderMaterial({
-    uniforms: { color: { value: new THREE.Color(1, 1, 1) }, size: { value: params.point_size }, alpha: { value: params.alpha } },
+    uniforms: { color: { value: new THREE.Color(1, 1, 1) }, size: { value: vizParams.point_size }, alpha: { value: vizParams.alpha } },
     vertexShader: shaders.vertex,
     fragmentShader: shaders.fragment,
     transparent: true,
@@ -282,7 +292,7 @@ function createTextSprite(text, { fontsize = 24, fontface = null, fillStyle = 'w
 addAxes();
 
 function animate() {
-    const dt = clock.getDelta();
+    const dt = clock.getDelta() * vizParams.animationSpeed;
     controls.update(dt);
     camera.lookAt(cameraCenter);
     renderer.render(scene, camera);
@@ -381,7 +391,7 @@ function updateArrows() {
     stepArrows.forEach(a => scene.remove(a));
     stepArrows = [];
     const p = geometry.attributes.position.array;
-    const n = Math.min(params.n_arrows, p.length / 3 - 1);
+    const n = Math.min(vizParams.n_arrows, p.length / 3 - 1);
     for (let i = 0; i < n; i++) {
         const ax = p[i * 3], ay = p[i * 3 + 1], az = p[i * 3 + 2];
         const bx = p[(i + 1) * 3], by = p[(i + 1) * 3 + 1], bz = p[(i + 1) * 3 + 2];
