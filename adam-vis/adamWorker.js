@@ -3,6 +3,9 @@ onmessage = function (e) {
     const vertexBuffer = new Float32Array(steps * 3);
     let optimizer = params.optimizer;
 
+
+    const enable_qr = params.enable_qr;
+
     let fun = stepAdam;
 
     if(optimizer == "adam"){
@@ -14,6 +17,10 @@ onmessage = function (e) {
     // Initialize variables
     let x = 1.0, m = 0.0, v = 1.0;
 
+    let q = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+
+    let le = [0, 0, 0];
+
     // Warmup iterations
     for (let i = 0; i < warmup; i++) {
         [x, m, v] = fun(x, m, v, params);
@@ -22,10 +29,31 @@ onmessage = function (e) {
     // Compute visualization points
     for (let i = 0; i < steps; i++) {
         [x, m, v] = fun(x, m, v, params);
+
+        if(enable_qr){
+            const D = stepAdamJ(x, m, v, params);
+
+            const qtilde = matMul3(D, q);
+
+            const res = qr3(qtilde);
+
+            q = res.Q;
+
+            for(let i = 0; i < le.length; i++){                
+                le[i] += Math.log(Math.abs(res.R[i][i]));
+            }
+        }
+
         vertexBuffer[i * 3] = x;
         vertexBuffer[i * 3 + 1] = m;
         vertexBuffer[i * 3 + 2] = v;
     }
+
+    for(let i = 0; i < le.length; i++){                
+        le[i] /= steps;
+    }
+
+    console.log(le);
 
     // Normalize the vertices (same normalization logic as before)
     normalizeVertices(vertexBuffer);
@@ -77,4 +105,173 @@ function normalizeVertices(vertices) {
         vertices[i * 3 + 1] /= max[1] - min[1];
         vertices[i * 3 + 2] /= 2 * avg_z;
     }
+}
+
+// [params.weight_decay, params.lr, params.b1, params.b2, x , m, v, params.epsilon]
+function stepAdamJ(x, m, v, params) {
+    const b2_c = -1  + params.b2;
+    const b1_c = -1 +  params.b1;
+
+    const gamma = (1 + params.weight_decay);
+    const gamma_square = gamma * gamma;
+
+    const x_gamma = x * gamma;
+    const x_gamma_sq = x_gamma * x_gamma;
+
+    const x_g_b1 = x_gamma + (m -x_gamma) * params.b1;
+
+    const int_eps = params.epsilon + Math.sqrt(-x_gamma_sq * b2_c + v * params.b2);
+    const int_eps_sq = int_eps * int_eps;
+
+    const top1_a = x * params.lr * gamma_square * x_g_b1 * b2_c;
+    const bottom1_a = Math.sqrt(-x_gamma_sq * b2_c + v * params.b2) * int_eps_sq;
+
+    const top1_b = b1_c * gamma
+    const bottom1_b = int_eps;
+
+    const top3 = params.lr * x_g_b1 * params.b2;
+    const bottom3 = 2 * bottom1_a;
+
+    const D =  [[1 - (top1_a/bottom1_a) + (top1_b/bottom1_b), -params.lr * params.b1 / int_eps, top3 / bottom3],
+               [-gamma*b1_c , params.b1, 0],
+               [-2 * x * gamma_square * b2_c, 0, params.b2]];
+
+    return D;
+}
+
+
+function qr3(A) {
+  // Validate shape
+  if (!Array.isArray(A) || A.length !== 3 || A.some(r => !Array.isArray(r) || r.length !== 3)) {
+    throw new Error("Input must be a 3x3 array");
+  }
+
+  // Copy A into R (Float64)
+  const R = [
+    [ +A[0][0], +A[0][1], +A[0][2] ],
+    [ +A[1][0], +A[1][1], +A[1][2] ],
+    [ +A[2][0], +A[2][1], +A[2][2] ]
+  ];
+
+  // Initialize Q as identity
+  const Q = [
+    [1,0,0],
+    [0,1,0],
+    [0,0,1]
+  ];
+
+  // Helper: apply Householder defined by unit vector v of length m-k
+  // to submatrix rows k..2 of R and to Q (left-multiplying)
+  function applyHouseholderToSubmatrix(v, k) {
+    // v length = 3-k, indexes 0..(2-k) correspond to rows k..2
+    const len = 3 - k;
+    // Apply to R: for each column j = k..2, compute dot = v^T * R[k..2][j]
+    for (let j = k; j < 3; ++j) {
+      let dot = 0.0;
+      for (let t = 0; t < len; ++t) dot += v[t] * R[k + t][j];
+      if (dot !== 0.0) {
+        const scale = 2 * dot;
+        for (let t = 0; t < len; ++t) R[k + t][j] -= scale * v[t];
+      }
+    }
+    // Apply to Q: Q := H * Q where H = I - 2 v v^T on rows k..2
+    for (let j = 0; j < 3; ++j) {
+      let dot = 0.0;
+      for (let t = 0; t < len; ++t) dot += v[t] * Q[k + t][j];
+      if (dot !== 0.0) {
+        const scale = 2 * dot;
+        for (let t = 0; t < len; ++t) Q[k + t][j] -= scale * v[t];
+      }
+    }
+  }
+
+  // Householder for column 0 (zero R[1][0], R[2][0])
+  {
+    // x = [R[0][0], R[1][0], R[2][0]]^T
+    const x0 = R[0][0], x1 = R[1][0], x2 = R[2][0];
+    const normx = Math.hypot(x0, x1, x2); // stable sqrt(x0^2 + x1^2 + x2^2)
+    if (normx > 0) {
+      const sign = x0 >= 0 ? 1 : -1;
+      // v = x + sign*normx * e1  (length 3)
+      let v0 = x0 + sign * normx, v1 = x1, v2 = x2;
+      // normalize v
+      const vnorm = Math.hypot(v0, v1, v2);
+      if (vnorm > 0) {
+        v0 /= vnorm; v1 /= vnorm; v2 /= vnorm;
+        applyHouseholderToSubmatrix([v0, v1, v2], 0);
+      }
+    }
+  }
+
+  // Householder for column 1 (zero R[2][1]); only rows 1..2 involved
+  {
+    // x = [R[1][1], R[2][1]]^T
+    const x0 = R[1][1], x1 = R[2][1];
+    const normx = Math.hypot(x0, x1);
+    if (normx > 0) {
+      const sign = x0 >= 0 ? 1 : -1;
+      let v0 = x0 + sign * normx, v1 = x1;
+      const vnorm = Math.hypot(v0, v1);
+      if (vnorm > 0) {
+        v0 /= vnorm; v1 /= vnorm;
+        applyHouseholderToSubmatrix([v0, v1], 1);
+      }
+    }
+  }
+
+  // Now R should be upper triangular (numerical tiny values possible)
+  // Force tiny entries below diagonal to zero for clean output
+  const eps = 1e-15;
+  if (Math.abs(R[1][0]) < eps) R[1][0] = 0;
+  if (Math.abs(R[2][0]) < eps) R[2][0] = 0;
+  if (Math.abs(R[2][1]) < eps) R[2][1] = 0;
+
+  // Return Q and R. Note: The algorithm produces R such that A = Q * R
+  return { Q: Q, R: R };
+}
+
+// --- Utility / self-test ---
+function matMul3(A, B) {
+  const C = [[0,0,0],[0,0,0],[0,0,0]];
+  for (let i=0;i<3;++i) for (let j=0;j<3;++j) {
+    let s = 0;
+    for (let k=0;k<3;++k) s += A[i][k]*B[k][j];
+    C[i][j]=s;
+  }
+  return C;
+}
+function transpose3(M) {
+  return [
+    [M[0][0], M[1][0], M[2][0]],
+    [M[0][1], M[1][1], M[2][1]],
+    [M[0][2], M[1][2], M[2][2]]
+  ];
+}
+function frobDiff3(A,B) {
+  let s = 0;
+  for (let i=0;i<3;++i) for (let j=0;j<3;++j) { const d = A[i][j]-B[i][j]; s+=d*d; }
+  return Math.sqrt(s);
+}
+function isOrthogonal(Q, tol=1e-12) {
+  const QtQ = matMul3(transpose3(Q), Q);
+  // compare with identity
+  for (let i=0;i<3;++i) for (let j=0;j<3;++j) {
+    const expected = (i===j?1:0);
+    if (Math.abs(QtQ[i][j]-expected) > tol) return false;
+  }
+  return true;
+}
+
+// Example
+if (typeof require !== 'undefined' && require.main === module) {
+  const A = [
+    [12, -51, 4],
+    [6, 167, -68],
+    [-4, 24, -41]
+  ];
+  const { Q, R } = qr3(A);
+  console.log("Q:", Q);
+  console.log("R:", R);
+  console.log("Orthogonal Q? ", isOrthogonal(Q));
+  console.log("Reconstruction error ||A - Q*R||_F =", frobDiff3(A, matMul3(Q,R)));
 }
