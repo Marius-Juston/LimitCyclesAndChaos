@@ -141,6 +141,10 @@ function processNextUpdate() {
         processNextUpdate();
         updateArrows();
     };
+    adamWorker.onerror = (err) => { console.error('Adam worker error:', err); workerRunning = false; };
+    adamWorker.onmessageerror = (err) => { console.error('Adam worker messageerror:', err); workerRunning = false; };
+
+
     adamWorker.postMessage(req);
 }
 
