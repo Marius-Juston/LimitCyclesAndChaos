@@ -161,7 +161,7 @@ function ensureColorCache(steps, palette = 'plasma') {
   const arr = new Float32Array(steps * 3);
 
 
-  if(palette == "white"){
+  if(palette === "white"){
     arr.fill(1.0);
     return arr;
   }

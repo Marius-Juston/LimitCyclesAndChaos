@@ -8,9 +8,9 @@ onmessage = function (e) {
 
     let fun = stepAdam;
 
-    if(optimizer == "adam"){
+    if(optimizer === "adam"){
         fun = stepAdam;
-    }else if(optimizer == "adamw"){
+    }else if(optimizer === "adamw"){
         fun = stepAdamW;
     }
 
@@ -66,7 +66,7 @@ onmessage = function (e) {
 
 // Adam
 function stepAdam(x, m, v, params) {
-    if(params.weight_decay != 0.0){
+    if(params.weight_decay !== 0.0){
         x = x + params.weight_decay * x;
     }
 
