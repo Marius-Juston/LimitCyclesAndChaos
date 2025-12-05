@@ -59,6 +59,8 @@ const presets = {
     "Preset 2": () => { Object.assign(params, { warmup: 10000, steps: 1000000, lr: 1.0, b1: 0.51, b2: 0.55, weight_decay: 0.01, epsilon: 0}); Object.assign(vizParams, {point_size: 2, alpha: 0.1, n_arrows: 0}); updateVisualization(); updateBox(); },
     "Preset 3": () => { Object.assign(params, { warmup: 10000, steps: 1000000, lr: 1.0, b1: 0.9, b2: 0.14, weight_decay: 0.01, epsilon: 0}); Object.assign(vizParams, {point_size: 2, alpha: 0.1, n_arrows: 16}); updateVisualization(); updateBox(); },
     "Preset 4": () => { Object.assign(params, { warmup: 10000, steps: 1000000, lr: 1.0, b1: 0.22, b2: 0.55, weight_decay: 0.01, epsilon: 0}); Object.assign(vizParams, {point_size: 2, alpha: 0.05, n_arrows: 0}); updateVisualization(); updateBox(); },
+    "Preset 5": () => { Object.assign(params, { warmup: 10000, steps: 1000000, lr: 1.0, b1: 0.9999, b2: 0.997, weight_decay: 0, epsilon: 0}); Object.assign(vizParams, {point_size: 2, alpha: 1, n_arrows: 0}); updateVisualization(); updateBox(); },
+    "Preset 6": () => { Object.assign(params, { warmup: 10000, steps: 1000000, lr: 1.0, b1: 0.629, b2: 0.277, weight_decay: 0, epsilon: 0}); Object.assign(vizParams, {point_size: 2, alpha: 1, n_arrows: 0}); updateVisualization(); updateBox(); },
 };
 
 const rs = { s: 1, box: 300, guiW: 320, guiFS: 13, titleFS: 18, labelFS: 36, spriteFS: 32 };
