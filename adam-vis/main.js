@@ -115,7 +115,7 @@ function setupGUI() {
     ctrls.add(params, 'b2', 0, 1).name('B2').onChange(() => { updateVisualization(); updateBox(); }).listen();
     ctrls.add(params, 'lr').name('Learning Rate').min(0).onChange(updateVisualization).listen();
     ctrls.add(params, 'epsilon').name('epsilon').min(0).onChange(updateVisualization).listen();
-    ctrls.add(params, 'weight_decay').name('Weight Decay').onChange(updateVisualization).listen();
+    ctrls.add(params, 'weight_decay', 0, 1).name('Weight Decay').onChange(updateVisualization).listen();
 
     ctrls.add(params, 'enable_qr').name('Enable Lyaponuv exponent computation').onChange(updateVisualization).listen();
 
