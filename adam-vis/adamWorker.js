@@ -369,6 +369,21 @@ function qr3(A) {
   if (Math.abs(R[2][0]) < eps) R[2][0] = 0;
   if (Math.abs(R[2][1]) < eps) R[2][1] = 0;
 
+
+  // If R[i][i] is negative, flip row i of R and col i of Q
+    for (let i = 0; i < 3; i++) {
+        if (R[i][i] < 0) {
+            // Flip row i of R
+            for (let j = 0; j < 3; j++) {
+                R[i][j] *= -1;
+            }
+            // Flip column i of Q
+            for (let j = 0; j < 3; j++) {
+                Q[j][i] *= -1;
+            }
+        }
+    }
+
   // Return Q and R. Note: The algorithm produces R such that A = Q * R
   return { Q: Q, R: R };
 }
