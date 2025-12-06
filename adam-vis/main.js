@@ -30,6 +30,10 @@ let leFolder = null;
 
 let clvComponent = null;
 
+let clvData = null;
+const clvGroup = new THREE.Group();
+scene.add(clvGroup);
+
 const numLE = 3;
 let leValues = [];
 
@@ -53,8 +57,10 @@ let vizParams =  {
     animationSpeed : 1.0,
     point_size: 2,
     alpha: 1,
-    n_arrows: 12,
-    n_clv_axis: 0.2 
+    n_arrows: 0,
+    n_clv_axis: 1000,
+    clv_scale: 0.15,
+    clv_thickness: 0.003 // Scale by 1000
 };
 
 let colorCache = {
@@ -122,7 +128,7 @@ function setupGUI() {
     ctrls.add(params, 'weight_decay', 0, 1).name('Weight Decay').onChange(updateVisualization).listen();
 
     ctrls.add(params, 'enable_qr').name('Enable Lyaponuv exponent computation').onChange(updateVisualization).listen();
-    clvComponent = ctrls.add(params, 'enable_clv').name('Enable local Lyaponuv exponent directions').onChange(updateVisualization).listen();
+    clvComponent = ctrls.add(params, 'enable_clv').name('Show CLV Directions').onChange(updateVisualization).listen();
 
     const viewCtrls = gui.addFolder('🎛️ Vizualization');
 
@@ -132,7 +138,10 @@ function setupGUI() {
     viewCtrls.add(vizParams, 'point_size').name('Point Size').min(0).onChange(() => { material.uniforms.size.value = vizParams.point_size; }).listen();
     viewCtrls.add(vizParams, 'alpha', 0, 1).name('Alpha').onChange(() => { material.uniforms.alpha.value = vizParams.alpha; }).listen();
     viewCtrls.add(vizParams, 'n_arrows').name('Number of Arrows').min(0).step(1).onChange(updateArrows).listen();
-    viewCtrls.add(vizParams, 'n_clv_axis', 0, 1).name('Percentage of Axis for CLV').min(0).step(1).onChange(updateArrows).listen();
+
+    viewCtrls.add(vizParams, 'n_clv_axis', 0.0, 1000.0).name('Num Axis for CLV').min(0).step(2).onChange(updateCLVVectors).listen();
+    viewCtrls.add(vizParams, 'clv_scale', 0, 0.2).name('Scale of CLV Axis').min(0).onChange(updateCLVVectors).listen();
+    viewCtrls.add(vizParams, 'clv_thickness', 0, 0.005).name('Thickness of CLV Axis').min(0).onChange(updateCLVVectors).listen();
 
     leFolder = gui.addFolder('📈 Lyapunov Exponents');
 
@@ -233,6 +242,7 @@ function updateVisualization() {
     pendingUpdate = { params, steps: params.steps, warmup: params.warmup };
     if (!workerRunning) processNextUpdate();
 }
+
 function processNextUpdate() {
     if (!pendingUpdate) return;
     const req = pendingUpdate; pendingUpdate = null; workerRunning = true;
@@ -240,6 +250,9 @@ function processNextUpdate() {
     adamWorker = new Worker(new URL('./adamWorker.js', import.meta.url), { type: 'module' });
     adamWorker.onmessage = e => {
         const { vertices, clvDirections, le } = e.data;
+
+        clvData = clvDirections;
+
         const arr = geometry.attributes.position.array;
         if (vertices.length !== arr.length) {
             geometry.dispose();
@@ -276,6 +289,7 @@ function processNextUpdate() {
         workerRunning = false;
         processNextUpdate();
         updateArrows();
+        updateCLVVectors();
     };
     adamWorker.onerror = (err) => { console.error('Adam worker error:', err); workerRunning = false; };
     adamWorker.onmessageerror = (err) => { console.error('Adam worker messageerror:', err); workerRunning = false; };
@@ -439,6 +453,60 @@ function updateArrows() {
         const arrow = Arrow(bx, by, bz, ax, ay, az, 0.005, 0xFF0000);
         scene.add(arrow);
         stepArrows.push(arrow);
+    }
+}
+
+
+function updateCLVVectors() {
+    clvGroup.clear();
+
+    if (!params.enable_clv || !clvData || !params.enable_qr) return;
+
+    const totalSteps = params.steps;
+    const numFrames = Math.min(totalSteps, Math.floor(vizParams.n_clv_axis)); 
+
+    if (numFrames <= 0) return;
+
+    const stride = Math.floor(totalSteps / numFrames);
+    const positions = geometry.attributes.position.array;
+
+    const vecScale = vizParams.clv_scale; 
+    const thickness = vizParams.clv_thickness;
+
+    for (let i = 0; i < numFrames; i++) {
+        const stepIndex = i * stride;
+        if (stepIndex >= totalSteps) break;
+
+        const ox = positions[stepIndex * 3];
+        const oy = positions[stepIndex * 3 + 1];
+        const oz = positions[stepIndex * 3 + 2];
+
+        // CLV Data Layout: [v1x, v1y, v1z, v2x, v2y, v2z, v3x, v3y, v3z] per step
+        const off = stepIndex * 9;
+
+        // Vector 1 (Most Unstable) - RED
+        clvGroup.add(Arrow(
+            ox + clvData[off + 0] * vecScale, 
+            oy + clvData[off + 1] * vecScale, 
+            oz + clvData[off + 2] * vecScale,
+            ox, oy, oz, thickness, 0xff0044
+        ));
+
+        // Vector 2 - GREEN
+        clvGroup.add(Arrow(
+            ox + clvData[off + 3] * vecScale, 
+            oy + clvData[off + 4] * vecScale, 
+            oz + clvData[off + 5] * vecScale,
+            ox, oy, oz, thickness, 0x00ff44
+        ));
+
+        // Vector 3 (Stable) - BLUE
+        clvGroup.add(Arrow(
+            ox + clvData[off + 6] * vecScale, 
+            oy + clvData[off + 7] * vecScale, 
+            oz + clvData[off + 8] * vecScale,
+            ox, oy, oz, thickness, 0x0088ff
+        ));
     }
 }
 

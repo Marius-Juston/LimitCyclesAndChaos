@@ -69,7 +69,7 @@ onmessage = function (e) {
 
     // Send the computed vertices back to the main thread,
     // transferring the underlying buffer to improve performance.
-    postMessage({ vertices: vertexBuffer, clv: clvBuffer, le:le }, [vertexBuffer.buffer, clvBuffer.buffer]);
+    postMessage({ vertices: vertexBuffer, clvDirections: clvBuffer, le:le }, [vertexBuffer.buffer, clvBuffer.buffer]);
 };
 
 function LEStep(x, m, v, q, le, funcD, params){
