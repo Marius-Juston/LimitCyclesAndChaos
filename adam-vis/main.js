@@ -30,6 +30,12 @@ let leFolder = null;
 
 let clvComponent = null;
 
+const clvColors = [
+    0xff0044,
+    0x00ff44,
+    0x0088ff
+]
+
 let clvData = null;
 const clvGroup = new THREE.Group();
 scene.add(clvGroup);
@@ -37,7 +43,8 @@ scene.add(clvGroup);
 const numLE = 3;
 let leValues = [];
 
-let stepArrows = [];
+const stepArrowsGroup = new THREE.Group();
+scene.add(stepArrowsGroup)
 
 let params = {
     optimizer: "adam",
@@ -110,6 +117,13 @@ function setupGUI() {
                 <li>Click/drag to set parameters</li>
                 <li>Green: stable zone</li>
                 <li>Red: unstable zone</li>
+            </ul>
+
+            <strong style="color: #6cf;">CLV Legend:</strong><br/>
+            <ul style="margin: 8px 0; padding-left: 20px; list-style: none;">
+                <li><span  style="color: #ff0044">&#9632;</span >Most unstable</li>
+                <li><span  style="color: #00ff44">&#9632;</span >Medium</li>
+                <li><span  style="color: #0088ff">&#9632;</span >Most stable</li>
             </ul>
 
             <strong style="color: #6cf;">Try the presets or drag the (β₁,β₂) dot!</strong>
@@ -327,6 +341,7 @@ function addAxes() {
     const y = createTextSprite('m', { fontsize: rs.spriteFS, scale: 0.5, fillStyle: 'rgb(75,75,150)' }); y.position.set(0, 1.1, 0); scene.add(y);
     const z = createTextSprite('v', { fontsize: rs.spriteFS, scale: 0.5, fillStyle: 'rgb(75,75,150)' }); z.position.set(0, 0, 1.1); scene.add(z);
 }
+
 function createTextSprite(text, { fontsize = 24, fontface = null, fillStyle = 'white', scale = 1 } = {}) {
     const dpr = Math.min(2, devicePixelRatio || 1);
     const w = fontsize * 4, h = fontsize * 2;
@@ -443,19 +458,18 @@ function updateBox() {
 }
 
 function updateArrows() {
-    stepArrows.forEach(a => scene.remove(a));
-    stepArrows = [];
+    stepArrowsGroup.clear();
+
     const p = geometry.attributes.position.array;
     const n = Math.min(vizParams.n_arrows, p.length / 3 - 1);
     for (let i = 0; i < n; i++) {
         const ax = p[i * 3], ay = p[i * 3 + 1], az = p[i * 3 + 2];
         const bx = p[(i + 1) * 3], by = p[(i + 1) * 3 + 1], bz = p[(i + 1) * 3 + 2];
         const arrow = Arrow(bx, by, bz, ax, ay, az, 0.005, 0xFF0000);
-        scene.add(arrow);
-        stepArrows.push(arrow);
+
+        stepArrowsGroup.add(arrow);
     }
 }
-
 
 function updateCLVVectors() {
     clvGroup.clear();
@@ -489,7 +503,7 @@ function updateCLVVectors() {
             ox + clvData[off + 0] * vecScale, 
             oy + clvData[off + 1] * vecScale, 
             oz + clvData[off + 2] * vecScale,
-            ox, oy, oz, thickness, 0xff0044
+            ox, oy, oz, thickness, clvColors[0]
         ));
 
         // Vector 2 - GREEN
@@ -497,7 +511,7 @@ function updateCLVVectors() {
             ox + clvData[off + 3] * vecScale, 
             oy + clvData[off + 4] * vecScale, 
             oz + clvData[off + 5] * vecScale,
-            ox, oy, oz, thickness, 0x00ff44
+            ox, oy, oz, thickness, clvColors[1]
         ));
 
         // Vector 3 (Stable) - BLUE
@@ -505,7 +519,7 @@ function updateCLVVectors() {
             ox + clvData[off + 6] * vecScale, 
             oy + clvData[off + 7] * vecScale, 
             oz + clvData[off + 8] * vecScale,
-            ox, oy, oz, thickness, 0x0088ff
+            ox, oy, oz, thickness, clvColors[2]
         ));
     }
 }
