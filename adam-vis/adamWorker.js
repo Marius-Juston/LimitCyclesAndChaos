@@ -6,13 +6,8 @@ onmessage = function (e) {
 
     const enable_qr = params.enable_qr;
 
-    let fun = stepAdam;
-
-    if(optimizer === "adam"){
-        fun = stepAdam;
-    }else if(optimizer === "adamw"){
-        fun = stepAdamW;
-    }
+    const fun = (optimizer === "adam")? stepAdam: stepAdamW ;
+    const funD = (optimizer === "adam")? stepAdamJ: stepAdamWJ ;
 
     // Initialize variables
     let x = 1.0, m = 0.0, v = 1.0;
@@ -27,7 +22,7 @@ onmessage = function (e) {
 
         if(enable_qr){
             // Used to align the q matrix beforehand
-            q = LEStep(x, m, v, q, le, stepAdamJ, params);
+            q = LEStep(x, m, v, q, le, funD, params);
         }
     }
 
@@ -38,7 +33,7 @@ onmessage = function (e) {
         [x, m, v] = fun(x, m, v, params);
 
         if(enable_qr){
-            q = LEStep(x, m, v, q, le, stepAdamJ, params);
+            q = LEStep(x, m, v, q, le, funD, params);
         }
 
         vertexBuffer[i * 3] = x;
@@ -141,11 +136,29 @@ function stepAdamJ(x, m, v, params) {
     const top3 = params.lr * x_g_b1 * params.b2;
     const bottom3 = 2 * bottom1_a;
 
-    const D =  [[1 - (top1_a/bottom1_a) + (top1_b/bottom1_b), -params.lr * params.b1 / int_eps, top3 / bottom3],
-               [-gamma*b1_c , params.b1, 0],
-               [-2 * x * gamma_square * b2_c, 0, params.b2]];
+    const D11 = 1 - (top1_a/bottom1_a) + (top1_b/bottom1_b);
+    const D12 = -params.lr * params.b1 / int_eps;
+    const D13 = top3 / bottom3;
+
+    const D21 = -gamma*b1_c;
+    const D22 = params.b1;
+    const D23 = 0;
+
+    const D31 = -2 * x * gamma_square * b2_c;
+    const D32 = 0;
+    const D33 = params.b2;
+
+    const D =  [[D11, D12, D13],
+                [D21, D22, D23],
+                [D31, D32, D33]];
 
     return D;
+}
+
+
+function stepAdamWJ(x, m, v, params) {
+    // TODO implement the correct gradient
+    return stepAdamJ(x, m, v, params);
 }
 
 
