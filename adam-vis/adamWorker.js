@@ -239,7 +239,6 @@ function qr3(A) {
   return { Q: Q, R: R };
 }
 
-// --- Utility / self-test ---
 function matMul3(A, B) {
   const C = [[0,0,0],[0,0,0],[0,0,0]];
   for (let i=0;i<3;++i) for (let j=0;j<3;++j) {
@@ -248,39 +247,4 @@ function matMul3(A, B) {
     C[i][j]=s;
   }
   return C;
-}
-function transpose3(M) {
-  return [
-    [M[0][0], M[1][0], M[2][0]],
-    [M[0][1], M[1][1], M[2][1]],
-    [M[0][2], M[1][2], M[2][2]]
-  ];
-}
-function frobDiff3(A,B) {
-  let s = 0;
-  for (let i=0;i<3;++i) for (let j=0;j<3;++j) { const d = A[i][j]-B[i][j]; s+=d*d; }
-  return Math.sqrt(s);
-}
-function isOrthogonal(Q, tol=1e-12) {
-  const QtQ = matMul3(transpose3(Q), Q);
-  // compare with identity
-  for (let i=0;i<3;++i) for (let j=0;j<3;++j) {
-    const expected = (i===j?1:0);
-    if (Math.abs(QtQ[i][j]-expected) > tol) return false;
-  }
-  return true;
-}
-
-// Example
-if (typeof require !== 'undefined' && require.main === module) {
-  const A = [
-    [12, -51, 4],
-    [6, 167, -68],
-    [-4, 24, -41]
-  ];
-  const { Q, R } = qr3(A);
-  console.log("Q:", Q);
-  console.log("R:", R);
-  console.log("Orthogonal Q? ", isOrthogonal(Q));
-  console.log("Reconstruction error ||A - Q*R||_F =", frobDiff3(A, matMul3(Q,R)));
 }
