@@ -77,7 +77,7 @@ let colorCache = {
 };
 
 const presets = {
-    "Preset 1": () => { Object.assign(params, { warmup: 10000, steps: 100000, lr: 1.0, b1: 0.92, b2: 0.44, weight_decay: 0.01, epsilon: 0}); Object.assign(vizParams, {point_size: 2, alpha: 1, n_arrows: 12}); updateVisualization(); updateBox(); },
+    "Preset 1": () => { Object.assign(params, { warmup: 10000, steps: 100000, lr: 1.0, b1: 0.92, b2: 0.44, weight_decay: 0.01, epsilon: 0, enable_qr: true, enable_clv:true}); Object.assign(vizParams, {point_size: 2, alpha: 1, n_arrows: 0}); updateVisualization(); updateBox(); },
     "Preset 2": () => { Object.assign(params, { warmup: 10000, steps: 1000000, lr: 1.0, b1: 0.51, b2: 0.55, weight_decay: 0.01, epsilon: 0}); Object.assign(vizParams, {point_size: 2, alpha: 0.1, n_arrows: 0}); updateVisualization(); updateBox(); },
     "Preset 3": () => { Object.assign(params, { warmup: 10000, steps: 1000000, lr: 1.0, b1: 0.9, b2: 0.14, weight_decay: 0.01, epsilon: 0}); Object.assign(vizParams, {point_size: 2, alpha: 0.1, n_arrows: 16}); updateVisualization(); updateBox(); },
     "Preset 4": () => { Object.assign(params, { warmup: 10000, steps: 1000000, lr: 1.0, b1: 0.22, b2: 0.55, weight_decay: 0.01, epsilon: 0}); Object.assign(vizParams, {point_size: 2, alpha: 0.05, n_arrows: 0}); updateVisualization(); updateBox(); },
