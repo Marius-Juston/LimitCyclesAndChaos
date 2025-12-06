@@ -157,8 +157,42 @@ function stepAdamJ(x, m, v, params) {
 
 
 function stepAdamWJ(x, m, v, params) {
-    // TODO implement the correct gradient
-    return stepAdamJ(x, m, v, params);
+    const b2_c = -1 + params.b2;
+    const b1_c = -1 + params.b1;
+
+    const x_sq = x * x;
+
+    const x_g_b1 = x + (m -x) * params.b1;
+
+    const int_eps = params.epsilon + Math.sqrt(x_sq + (v - x_sq) * params.b2);
+    const int_eps_sq = int_eps * int_eps;
+
+    const top1_a = -x * params.lr  * x_g_b1 * b2_c;
+    const bottom1_a = Math.sqrt(x_sq + (v - x_sq) * params.b2) * int_eps_sq;
+
+    const top1_b = b1_c * params.lr;
+    const bottom1_b = int_eps;
+
+    const top3 = params.lr * x_g_b1 * params.b2;
+    const bottom3 = 2 * bottom1_a;
+
+    const D11 = 1 - params.lr * params.weight_decay + (top1_a/bottom1_a) + (top1_b/bottom1_b);
+    const D12 = -params.lr * params.b1 / int_eps;
+    const D13 = top3 / bottom3;
+
+    const D21 = 1-params.b1;
+    const D22 = params.b1;
+    const D23 = 0;
+
+    const D31 = -2 * x * b2_c;
+    const D32 = 0;
+    const D33 = params.b2;
+
+    const D =  [[D11, D12, D13],
+                [D21, D22, D23],
+                [D31, D32, D33]];
+
+    return D;
 }
 
 
