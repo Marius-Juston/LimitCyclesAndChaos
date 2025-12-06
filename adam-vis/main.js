@@ -28,6 +28,8 @@ controls.enablePan = false;
 
 let leFolder = null;
 
+let clvComponent = null;
+
 const numLE = 3;
 let leValues = [];
 
@@ -42,7 +44,8 @@ let params = {
     b2: 0.44,
     weight_decay: 0.01,
     epsilon: 0,
-    enable_qr: false
+    enable_qr: false,
+    enable_clv: false
 };
 
 let vizParams =  {
@@ -51,6 +54,7 @@ let vizParams =  {
     point_size: 2,
     alpha: 1,
     n_arrows: 12,
+    n_clv_axis: 0.2 
 };
 
 let colorCache = {
@@ -118,6 +122,7 @@ function setupGUI() {
     ctrls.add(params, 'weight_decay', 0, 1).name('Weight Decay').onChange(updateVisualization).listen();
 
     ctrls.add(params, 'enable_qr').name('Enable Lyaponuv exponent computation').onChange(updateVisualization).listen();
+    clvComponent = ctrls.add(params, 'enable_clv').name('Enable local Lyaponuv exponent directions').onChange(updateVisualization).listen();
 
     const viewCtrls = gui.addFolder('🎛️ Vizualization');
 
@@ -127,6 +132,7 @@ function setupGUI() {
     viewCtrls.add(vizParams, 'point_size').name('Point Size').min(0).onChange(() => { material.uniforms.size.value = vizParams.point_size; }).listen();
     viewCtrls.add(vizParams, 'alpha', 0, 1).name('Alpha').onChange(() => { material.uniforms.alpha.value = vizParams.alpha; }).listen();
     viewCtrls.add(vizParams, 'n_arrows').name('Number of Arrows').min(0).step(1).onChange(updateArrows).listen();
+    viewCtrls.add(vizParams, 'n_clv_axis', 0, 1).name('Percentage of Axis for CLV').min(0).step(1).onChange(updateArrows).listen();
 
     leFolder = gui.addFolder('📈 Lyapunov Exponents');
 
@@ -136,6 +142,8 @@ function setupGUI() {
 
     if(!params.enable_qr){
         leFolder.hide();
+
+        clvComponent.hide();
     }
 
     Object.keys(presets).forEach(k => ctrls.add(presets, k).name(k));
@@ -231,7 +239,7 @@ function processNextUpdate() {
     if (adamWorker) { adamWorker.terminate(); adamWorker = null; }
     adamWorker = new Worker(new URL('./adamWorker.js', import.meta.url), { type: 'module' });
     adamWorker.onmessage = e => {
-        const { vertices, le } = e.data;
+        const { vertices, clvDirections, le } = e.data;
         const arr = geometry.attributes.position.array;
         if (vertices.length !== arr.length) {
             geometry.dispose();
@@ -253,6 +261,7 @@ function processNextUpdate() {
 
         if (params.enable_qr) {
             leFolder.show();
+            clvComponent.show();
 
             le.forEach((v, i) => {
                 leValues[i].setValue(v.toFixed(5));
@@ -260,6 +269,7 @@ function processNextUpdate() {
         } 
         else {
             leFolder.hide();
+            clvComponent.hide();
         }
 
 

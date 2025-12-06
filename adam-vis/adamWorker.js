@@ -1,10 +1,13 @@
 onmessage = function (e) {
     const { params, steps, warmup } = e.data;
     const vertexBuffer = new Float32Array(steps * 3);
+
     let optimizer = params.optimizer;
 
-
     const enable_qr = params.enable_qr;
+    const enable_clv = params.enable_clv;
+
+    const clvBuffer = new Float32Array(enable_clv? steps * 3 * 3: 0);
 
     const fun = (optimizer === "adam")? stepAdam: stepAdamW ;
     const funD = (optimizer === "adam")? stepAdamJ: stepAdamWJ ;
@@ -16,13 +19,16 @@ onmessage = function (e) {
 
     let le = [0, 0, 0];
 
+    let historyQ = [];
+    let historyR = [];
+
     // Warmup iterations
     for (let i = 0; i < warmup; i++) {
         [x, m, v] = fun(x, m, v, params);
 
         if(enable_qr){
             // Used to align the q matrix beforehand
-            q = LEStep(x, m, v, q, le, funD, params);
+            q = LEStep(x, m, v, q, le, funD, params).Q;
         }
     }
 
@@ -33,7 +39,14 @@ onmessage = function (e) {
         [x, m, v] = fun(x, m, v, params);
 
         if(enable_qr){
-            q = LEStep(x, m, v, q, le, funD, params);
+            const res =  LEStep(x, m, v, q, le, funD, params);
+
+            q = res.Q;
+
+            if(enable_clv){
+                historyQ.push(res.Q); 
+                historyR.push(res.R);
+            }
         }
 
         vertexBuffer[i * 3] = x;
@@ -41,8 +54,14 @@ onmessage = function (e) {
         vertexBuffer[i * 3 + 2] = v;
     }
 
-    for(let i = 0; i < le.length; i++){                
-        le[i] /= (steps);
+    if(enable_qr){
+        for(let i = 0; i < le.length; i++){                
+            le[i] /= (steps);
+        }
+
+        if(enable_clv) {
+            computeCLVs(historyQ, historyR, clvBuffer, steps);
+        }
     }
 
     // Normalize the vertices (same normalization logic as before)
@@ -50,7 +69,7 @@ onmessage = function (e) {
 
     // Send the computed vertices back to the main thread,
     // transferring the underlying buffer to improve performance.
-    postMessage({ vertices: vertexBuffer, le:le }, [vertexBuffer.buffer]);
+    postMessage({ vertices: vertexBuffer, clv: clvBuffer, le:le }, [vertexBuffer.buffer, clvBuffer.buffer]);
 };
 
 function LEStep(x, m, v, q, le, funcD, params){
@@ -64,7 +83,7 @@ function LEStep(x, m, v, q, le, funcD, params){
         le[i] += Math.log(Math.abs(res.R[i][i]));
     }
 
-    return res.Q;
+    return res;
 }
 
 
@@ -196,6 +215,74 @@ function stepAdamWJ(x, m, v, params) {
 }
 
 
+function computeCLVs(histQ, histR, buffer, steps) {
+    // Initialize Coefficient matrix C as Identity
+    // This represents the vectors in the basis of Q.
+    let C = [[1,0,0], [0,1,0], [0,0,1]];
+
+    // Iterate backwards from the last step
+    for (let i = steps - 1; i >= 0; i--) {
+        const R = histR[i];
+        const Q = histQ[i];
+
+        // 1. Invert R (Upper Triangular)
+        const R_inv = invertUpperTriangular3(R);
+
+        // 2. Back-propagate C: C_new = R_inv * C
+        C = matMul3(R_inv, C);
+
+        // 3. Normalize columns of C to prevent numerical overflow/underflow
+        // The direction is what matters, not the magnitude here.
+        normalizeColumns3(C);
+
+        // 4. Compute actual CLV in phase space: V = Q * C
+        const V = matMul3(Q, C);
+
+        // 5. Write to buffer
+        // Layout: Step i -> [Vec1_x, Vec1_y, Vec1_z, Vec2_x, ... Vec3_z]
+        const offset = i * 9;
+        
+        // Vector 1 (Most unstable)
+        buffer[offset + 0] = V[0][0];
+        buffer[offset + 1] = V[1][0];
+        buffer[offset + 2] = V[2][0];
+
+        // Vector 2
+        buffer[offset + 3] = V[0][1];
+        buffer[offset + 4] = V[1][1];
+        buffer[offset + 5] = V[2][1];
+
+        // Vector 3 (Least unstable / Most stable)
+        buffer[offset + 6] = V[0][2];
+        buffer[offset + 7] = V[1][2];
+        buffer[offset + 8] = V[2][2];
+    }
+}
+
+function invertUpperTriangular3(R) {
+    const S = [[0,0,0], [0,0,0], [0,0,0]];
+    
+    // Diagonal elements: 1 / R_ii
+    const a = R[0][0], d = R[1][1], f = R[2][2];
+    S[0][0] = 1.0 / a;
+    S[1][1] = 1.0 / d;
+    S[2][2] = 1.0 / f;
+
+    // Off-diagonals (explicit back-substitution for 3x3)
+    const b = R[0][1], c = R[0][2], e = R[1][2];
+
+    // S[0][1]
+    S[0][1] = -b * S[0][0] * S[1][1]; 
+    
+    // S[1][2]
+    S[1][2] = -e * S[1][1] * S[2][2];
+
+    // S[0][2]
+    S[0][2] = -(b * S[1][2] + c * S[2][2]) * S[0][0];
+
+    return S;
+}
+
 function qr3(A) {
   // Validate shape
   if (!Array.isArray(A) || A.length !== 3 || A.some(r => !Array.isArray(r) || r.length !== 3)) {
@@ -294,4 +381,19 @@ function matMul3(A, B) {
     C[i][j]=s;
   }
   return C;
+}
+
+function normalizeColumns3(M) {
+    for (let col = 0; col < 3; col++) {
+        let sumSq = 0;
+        for (let row = 0; row < 3; row++) {
+            sumSq += M[row][col] * M[row][col];
+        }
+        const mag = Math.sqrt(sumSq);
+        if (mag > 1e-15) {
+            for (let row = 0; row < 3; row++) {
+                M[row][col] /= mag;
+            }
+        }
+    }
 }
