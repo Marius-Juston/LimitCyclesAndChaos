@@ -24,24 +24,21 @@ onmessage = function (e) {
     // Warmup iterations
     for (let i = 0; i < warmup; i++) {
         [x, m, v] = fun(x, m, v, params);
+
+        if(enable_qr){
+            // Used to align the q matrix beforehand
+            q = LEStep(x, m, v, q, le, stepAdamJ, params);
+        }
     }
+
+    le = [0, 0, 0];
 
     // Compute visualization points
     for (let i = 0; i < steps; i++) {
         [x, m, v] = fun(x, m, v, params);
 
         if(enable_qr){
-            const D = stepAdamJ(x, m, v, params);
-
-            const qtilde = matMul3(D, q);
-
-            const res = qr3(qtilde);
-
-            q = res.Q;
-
-            for(let i = 0; i < le.length; i++){                
-                le[i] += Math.log(Math.abs(res.R[i][i]));
-            }
+            q = LEStep(x, m, v, q, le, stepAdamJ, params);
         }
 
         vertexBuffer[i * 3] = x;
@@ -50,18 +47,30 @@ onmessage = function (e) {
     }
 
     for(let i = 0; i < le.length; i++){                
-        le[i] /= steps;
+        le[i] /= (steps);
     }
-
-    console.log(le);
 
     // Normalize the vertices (same normalization logic as before)
     normalizeVertices(vertexBuffer);
 
     // Send the computed vertices back to the main thread,
     // transferring the underlying buffer to improve performance.
-    postMessage({ vertices: vertexBuffer }, [vertexBuffer.buffer]);
+    postMessage({ vertices: vertexBuffer, le:le }, [vertexBuffer.buffer]);
 };
+
+function LEStep(x, m, v, q, le, funcD, params){
+    const D = funcD(x, m, v, params);
+
+    const qtilde = matMul3(D, q);
+
+    const res = qr3(qtilde);
+
+    for(let i = 0; i < le.length; i++){                
+        le[i] += Math.log(Math.abs(res.R[i][i]));
+    }
+
+    return res.Q;
+}
 
 
 // Adam

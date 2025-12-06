@@ -26,6 +26,11 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.enablePan = false;
 
+let leFolder = null;
+
+const numLE = 3;
+let leValues = [];
+
 let stepArrows = [];
 
 let params = {
@@ -123,6 +128,16 @@ function setupGUI() {
     viewCtrls.add(vizParams, 'alpha', 0, 1).name('Alpha').onChange(() => { material.uniforms.alpha.value = vizParams.alpha; }).listen();
     viewCtrls.add(vizParams, 'n_arrows').name('Number of Arrows').min(0).step(1).onChange(updateArrows).listen();
 
+    leFolder = gui.addFolder('📈 Lyapunov Exponents');
+
+    for(let i = 0; i < numLE; ++i){
+        leValues.push( leFolder.add({ [`LE${i}`]: 0 }, `LE${i}`));
+    }
+
+    if(!params.enable_qr){
+        leFolder.hide();
+    }
+
     Object.keys(presets).forEach(k => ctrls.add(presets, k).name(k));
 
     const style = document.createElement('style');
@@ -216,7 +231,7 @@ function processNextUpdate() {
     if (adamWorker) { adamWorker.terminate(); adamWorker = null; }
     adamWorker = new Worker(new URL('./adamWorker.js', import.meta.url), { type: 'module' });
     adamWorker.onmessage = e => {
-        const { vertices } = e.data;
+        const { vertices, le } = e.data;
         const arr = geometry.attributes.position.array;
         if (vertices.length !== arr.length) {
             geometry.dispose();
@@ -235,6 +250,19 @@ function processNextUpdate() {
 
             applyColorsToGeometry();
         }
+
+        if (params.enable_qr) {
+            leFolder.show();
+
+            le.forEach((v, i) => {
+                leValues[i].setValue(v.toFixed(5));
+            });
+        } 
+        else {
+            leFolder.hide();
+        }
+
+
         workerRunning = false;
         processNextUpdate();
         updateArrows();
